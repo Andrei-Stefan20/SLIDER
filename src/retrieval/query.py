@@ -1,7 +1,5 @@
 """High-level query interface over a FAISS index."""
 
-from typing import Any
-
 import faiss
 import numpy as np
 import torch
@@ -59,14 +57,15 @@ def search_with_sliders(
 
     # Extract decoder weight matrix: shape (input_dim, hidden_dim)
     if sae_model.tied_weights:
+        # encoder.weight: (hidden_dim, input_dim) → .T: (input_dim, hidden_dim)
         decoder_weight = sae_model.encoder.weight.detach().cpu().numpy().T
     else:
-        decoder_weight = sae_model.decoder.weight.detach().cpu().numpy().T
+        # decoder.weight: (input_dim, hidden_dim) — no .T needed
+        decoder_weight = sae_model.decoder.weight.detach().cpu().numpy()
 
     feature_ids = list(slider_config.keys())
     alphas = [slider_config[fid] for fid in feature_ids]
-    # directions: (n_sliders, D)
-    directions = decoder_weight[:, feature_ids].T
+    directions = decoder_weight[:, feature_ids].T  # (n_sliders, input_dim)
 
     steered = steer_query(query_emb, directions, alphas)
     return search(index, steered, k=k)

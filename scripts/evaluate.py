@@ -74,8 +74,9 @@ def main() -> None:
 
     results = []
     for i in range(len(norm_embs)):
-        _, retrieved = search(index, norm_embs[i], k=args.top_k)
-        results.append({"retrieved": retrieved.tolist(), "relevant": ground_truth[i]})
+        _, retrieved = search(index, norm_embs[i], k=args.top_k + 1)
+        retrieved_filtered = [r for r in retrieved.tolist() if r != i][:args.top_k]
+        results.append({"retrieved": retrieved_filtered, "relevant": ground_truth[i]})
 
     recall = mean_recall_at_k(results, k_values=[1, 5, 10])
     print("\n=== Recall@K ===")

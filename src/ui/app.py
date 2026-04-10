@@ -52,23 +52,20 @@ def load_resources(
     embeddings = np.load(embeddings_path)
     image_paths = json.loads(image_paths_json.read_text())
 
-    # Compute activations and pick the most variable features
-    with torch.no_grad():
-        tensor = torch.from_numpy(embeddings)
-        activations = sae.encode(tensor).numpy()
-
-    ranked = rank_features_by_variance(activations)
-    feature_ids = ranked[:N_SLIDERS]
-
-    # Attempt to load cached names; fall back to generic labels
     names_path = sae_path.parent / "feature_names.json"
     if names_path.exists():
-        all_names: dict = json.loads(names_path.read_text())
-        feature_names = [
-            all_names.get(str(fid), f"Feature {fid}") for fid in feature_ids
-        ]
+        all_names = json.loads(names_path.read_text())
+        feature_ids = [int(k) for k in list(all_names.keys())[:N_SLIDERS]]
+        feature_names = [all_names[str(fid)] for fid in feature_ids]
     else:
+        with torch.no_grad():
+            activations = sae.encode(
+                torch.from_numpy(embeddings.astype(np.float32))
+            ).numpy()
+        ranked = rank_features_by_variance(activations)
+        feature_ids = ranked[:N_SLIDERS]
         feature_names = [f"Feature {fid}" for fid in feature_ids]
+        del activations
 
     return dino, sae, index, embeddings, image_paths, feature_ids, feature_names
 
@@ -109,6 +106,7 @@ def build_app(
         ])
         img_tensor = transform(pil_img).unsqueeze(0)
         query_emb = dino.encode(img_tensor).squeeze(0).numpy()
+        query_emb = query_emb / (np.linalg.norm(query_emb) + 1e-8)
 
         slider_config = {
             fid: float(alpha)
