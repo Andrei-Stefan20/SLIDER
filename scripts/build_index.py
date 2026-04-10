@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from src.retrieval.index import build_index, save_index
+from src.utils.io import normalize_embeddings
 
 
 def main() -> None:
@@ -38,8 +39,7 @@ def main() -> None:
     print(f"Loaded {embeddings.shape} from {args.embeddings}")
 
     if not args.no_normalize:
-        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-        embeddings = embeddings / np.where(norms > 0, norms, 1.0)
+        embeddings = normalize_embeddings(embeddings)
 
     index = build_index(embeddings)
     save_index(index, args.output)

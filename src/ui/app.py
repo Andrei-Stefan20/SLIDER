@@ -1,9 +1,10 @@
 """Gradio-based interactive retrieval UI for SLIDERS."""
 
+import argparse
+import json
 from pathlib import Path
 
 import gradio as gr
-import json
 import numpy as np
 import torch
 import torchvision.transforms as T
@@ -14,6 +15,7 @@ from src.models.sae import SparseAutoencoder
 from src.naming.feature_namer import rank_features_by_variance
 from src.retrieval.index import load_index
 from src.retrieval.query import search_with_sliders
+from src.utils.io import normalize_embeddings
 from src.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -38,8 +40,27 @@ def load_resources(
     sae_path: Path = DEFAULT_SAE_PATH,
     embeddings_path: Path = DEFAULT_EMBEDDINGS_PATH,
     image_paths_json: Path = DEFAULT_IMAGE_PATHS_JSON,
+    dataset: str | None = None,
 ) -> tuple:
-    """Load all pre-built artefacts needed for interactive retrieval."""
+    """Load all pre-built artefacts needed for interactive retrieval.
+
+    Args:
+        index_path: Path to the FAISS index file.
+        sae_path: Path to the SAE checkpoint.
+        embeddings_path: Path to the embeddings .npy file.
+        image_paths_json: Path to the image paths JSON file.
+        dataset: If provided, override ``embeddings_path`` and
+            ``image_paths_json`` with ``data/processed/{dataset}_*.{ext}``
+            paths.  ``index_path`` and ``sae_path`` are not affected.
+
+    Returns:
+        Tuple of ``(dino, sae, index, embeddings, image_paths, feature_ids,
+        feature_names)``.
+    """
+    if dataset is not None:
+        embeddings_path = Path(f"data/processed/{dataset}_embeddings.npy")
+        image_paths_json = Path(f"data/processed/{dataset}_image_paths.json")
+
     dino = DINOEncoder(use_patches=False)
 
     sae_state = torch.load(sae_path, map_location="cpu")
@@ -76,10 +97,22 @@ def build_app(
     sae_path: Path = DEFAULT_SAE_PATH,
     embeddings_path: Path = DEFAULT_EMBEDDINGS_PATH,
     image_paths_json: Path = DEFAULT_IMAGE_PATHS_JSON,
+    dataset: str | None = None,
 ) -> gr.Blocks:
-    """Construct and return the Gradio Blocks app."""
+    """Construct and return the Gradio Blocks app.
+
+    Args:
+        index_path: Path to the FAISS index file.
+        sae_path: Path to the SAE checkpoint.
+        embeddings_path: Path to the embeddings .npy file.
+        image_paths_json: Path to the image paths JSON file.
+        dataset: Passed through to :func:`load_resources` for path resolution.
+
+    Returns:
+        Configured :class:`gr.Blocks` application.
+    """
     dino, sae, index, embeddings, image_paths, feature_ids, feature_names = (
-        load_resources(index_path, sae_path, embeddings_path, image_paths_json)
+        load_resources(index_path, sae_path, embeddings_path, image_paths_json, dataset)
     )
 
     def retrieve(query_image: np.ndarray | None, *slider_values: float):
@@ -89,7 +122,7 @@ def build_app(
         pil_img = Image.fromarray(query_image).convert("RGB")
         img_tensor = _DINO_TRANSFORM(pil_img).unsqueeze(0)
         query_emb = dino.encode(img_tensor).squeeze(0).numpy()
-        query_emb = query_emb / (np.linalg.norm(query_emb) + 1e-8)
+        query_emb = normalize_embeddings(query_emb.reshape(1, -1)).squeeze(0)
 
         slider_config = {
             fid: float(alpha)
@@ -147,5 +180,22 @@ def build_app(
 
 
 if __name__ == "__main__":
-    app = build_app()
-    app.launch(share=False)
+    parser = argparse.ArgumentParser(description="Launch the SLIDERS Gradio UI.")
+    parser.add_argument(
+        "--dataset",
+        type=str,
+        default=None,
+        help="Dataset name (e.g. plantvillage). Resolves embeddings and image-paths "
+             "from data/processed/<dataset>_*.{npy,json}.",
+    )
+    parser.add_argument("--index", type=Path, default=DEFAULT_INDEX_PATH)
+    parser.add_argument("--sae-model", type=Path, default=DEFAULT_SAE_PATH)
+    parser.add_argument("--share", action="store_true", help="Create a public Gradio link.")
+    args = parser.parse_args()
+
+    app = build_app(
+        index_path=args.index,
+        sae_path=args.sae_model,
+        dataset=args.dataset,
+    )
+    app.launch(share=args.share)

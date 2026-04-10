@@ -23,6 +23,7 @@ from src.models.sae import SparseAutoencoder
 from src.naming.feature_namer import get_top_images, rank_features_by_variance
 from src.retrieval.index import load_index
 from src.retrieval.query import search
+from src.utils.io import normalize_embeddings
 
 
 def build_same_class_ground_truth(image_paths: list[str]) -> list[list[int]]:
@@ -63,14 +64,14 @@ def main() -> None:
 
     # ---------- Recall@K ----------
     print("Computing Recall@K (same-class ground truth)...")
-    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
-    norm_embs = embeddings / np.where(norms > 0, norms, 1.0)
+    norm_embs = normalize_embeddings(embeddings)
     ground_truth = build_same_class_ground_truth(image_paths)
 
     results = []
     for i in range(len(norm_embs)):
         _, retrieved = search(index, norm_embs[i], k=args.top_k + 1)
-        retrieved_filtered = [r for r in retrieved.tolist() if r != i][:args.top_k]
+        mask = retrieved != i
+        retrieved_filtered = retrieved[mask][:args.top_k].tolist()
         results.append({"retrieved": retrieved_filtered, "relevant": ground_truth[i]})
 
     recall = mean_recall_at_k(results, k_values=[1, 5, 10])
