@@ -5,49 +5,16 @@ Usage:
 """
 
 import argparse
-import json
 from pathlib import Path
 
 import numpy as np
 import torch
-from PIL import Image
-from torch.utils.data import DataLoader, Dataset
-import torchvision.transforms as T
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
+from src.data.loader import ImageFolderFlat
 from src.encoders.dino_encoder import DINOEncoder
-
-
-IMAGENET_TRANSFORM = T.Compose([
-    T.Resize(256),
-    T.CenterCrop(224),
-    T.ToTensor(),
-    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-])
-
-
-class ImageFolderFlat(Dataset):
-    """Recursively loads all images from a directory tree.
-
-    Args:
-        root: Root directory to search.
-        extensions: Accepted file extensions.
-    """
-
-    EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
-
-    def __init__(self, root: Path, transform=None) -> None:
-        self.paths = sorted(
-            p for p in root.rglob("*") if p.suffix.lower() in self.EXTENSIONS
-        )
-        self.transform = transform or IMAGENET_TRANSFORM
-
-    def __len__(self) -> int:
-        return len(self.paths)
-
-    def __getitem__(self, idx: int) -> tuple[torch.Tensor, str]:
-        img = Image.open(self.paths[idx]).convert("RGB")
-        return self.transform(img), str(self.paths[idx])
+from src.utils.io import save_embeddings, save_image_paths
 
 
 def collate_fn(batch):
@@ -116,8 +83,8 @@ def main() -> None:
     emb_path = output_dir / f"{args.dataset}_embeddings.npy"
     paths_path = output_dir / f"{args.dataset}_image_paths.json"
 
-    np.save(emb_path, embeddings)
-    paths_path.write_text(json.dumps(all_paths, indent=2))
+    save_embeddings(embeddings, emb_path)
+    save_image_paths(all_paths, paths_path)
 
     print(f"Saved embeddings ({embeddings.shape}) -> {emb_path}")
     print(f"Saved image paths ({len(all_paths)})  -> {paths_path}")

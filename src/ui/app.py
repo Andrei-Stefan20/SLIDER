@@ -42,7 +42,7 @@ def load_resources(
 
     sae_state = torch.load(sae_path, map_location="cpu")
     # Infer dims from state dict
-    input_dim = sae_state["encoder.bias"].shape[0] if "encoder.bias" in sae_state else 1024
+    input_dim = sae_state["encoder.weight"].shape[1]
     hidden_dim = sae_state["encoder.weight"].shape[0]
     sae = SparseAutoencoder(input_dim=input_dim, hidden_dim=hidden_dim)
     sae.load_state_dict(sae_state)
