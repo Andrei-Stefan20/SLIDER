@@ -1,0 +1,25 @@
+dataset:
+  name: ceramics
+  path: data/raw/ceramics
+  image_size: 224
+  batch_size: 32
+
+encoder:
+  model: dinov2_vitl14
+  use_patches: false
+
+sae:
+  input_dim: 1024
+  hidden_dim: 4096
+  lambda_sparsity: 0.0005
+  lr: 0.0003
+  epochs: 100
+  batch_size: 256
+
+retrieval:
+  top_k: 10
+  n_sliders: 15
+
+naming:
+  top_k_images: 10
+  llm_model: gpt-4o

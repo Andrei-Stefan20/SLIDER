@@ -1,0 +1,25 @@
+dataset:
+  name: plantvillage
+  path: data/raw/plantvillage
+  image_size: 224
+  batch_size: 64
+
+encoder:
+  model: dinov2_vitl14
+  use_patches: false
+
+sae:
+  input_dim: 1024
+  hidden_dim: 8192
+  lambda_sparsity: 0.001
+  lr: 0.0003
+  epochs: 50
+  batch_size: 512
+
+retrieval:
+  top_k: 10
+  n_sliders: 20
+
+naming:
+  top_k_images: 10
+  llm_model: gpt-4o
