@@ -9,6 +9,14 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 
+def _get_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 class DINOEncoder:
     """Wraps DINOv2 ViT-L/14 for CLS-token and patch-token extraction.
 
@@ -24,7 +32,11 @@ class DINOEncoder:
                 of the CLS token.  CLS token has shape ``(B, 1024)``;
                 patch tokens have shape ``(B, N_patches, 1024)``.
         """
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        device = _get_device()
+        # DINOv2 has known MPS issues — fall back to CPU
+        if device.type == "mps":
+            device = torch.device("cpu")
+        self.device = device
         self.use_patches = use_patches
 
         self.model: nn.Module = torch.hub.load(

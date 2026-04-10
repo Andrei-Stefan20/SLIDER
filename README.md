@@ -1,6 +1,8 @@
 # SLIDERS
 
-Zero-shot interactive image retrieval using Sparse Autoencoders (SAEs) trained on DINOv2 features.
+## What is this?
+
+You upload an image. The system finds visually similar images in a dataset — but unlike standard retrieval, it also shows you a set of sliders, each labelled with a visual concept like "leaf margin complexity" or "surface texture uniformity". These concepts are discovered automatically: a Sparse Autoencoder (SAE) is trained on DINOv2 embeddings of the dataset, and its learned features are named by showing top/bottom activating images to CLIP and GPT-4o. When you move a slider, the query embedding is shifted along the corresponding SAE feature direction, steering retrieval toward images that have more or less of that property. No text input is required at any point — the sliders are the interface.
 
 ---
 
@@ -51,6 +53,10 @@ Raw Images
 │          Retrieved Gallery                       │
 └─────────────────────────────────────────────────┘
 ```
+
+## How it works
+
+DINOv2 embeddings are extracted once and stored on disk. The SAE is trained on these embeddings to decompose them into sparse, roughly monosemantic features — each decoder column becomes a direction in embedding space that corresponds to some visual property. To name these directions, we find the images that activate each feature most and least, describe them with CLIP against a vocabulary of visual adjectives, and pass those descriptions to GPT-4o to generate a short label. At retrieval time, the query embedding is shifted by a weighted sum of selected feature directions before the FAISS search, producing results that reflect the slider adjustments.
 
 ---
 
@@ -146,13 +152,21 @@ Reports **Recall@1/5/10** (same-class ground truth) and **CLIP alignment** for e
 
 ## Datasets
 
-| Dataset | Description | Classes |
-|---------|-------------|---------|
-| **PlantVillage** | Plant leaf disease images | 38 disease/healthy classes |
-| **Ceramics** | Archaeological ceramic shards | Typology-based categories |
+| Dataset | Description | Classes | Notes |
+|---------|-------------|---------|-------|
+| **PlantVillage** | Plant leaf disease images | 38 disease/healthy classes | Main benchmark — disease features are visually continuous, ideal for slider discovery |
+| **Ceramics** | Archaeological ceramic shards | Typology-based categories | Stress test — iconographic features push the limits of the backbone |
 
 Place raw images under `data/raw/<dataset>/` following the standard ImageFolder layout
 (`data/raw/plantvillage/<class_name>/<image>.jpg`).
+
+---
+
+## Known limitations
+
+- SAE features may not be interpretable on all datasets. Sparsity and hidden dimension interact with the visual diversity of the corpus; expect dead or uninterpretable features, especially on small or iconographically constrained collections.
+- Naming quality depends on CLIP vocabulary coverage and the LLM prompt. The pipeline can produce plausible-sounding but inaccurate names when the true feature captures something outside the default adjective vocabulary.
+- Retrieval is zero-shot; no supervised fine-tuning is performed. Recall numbers should be read as a measure of the backbone's representational quality for a given dataset, not as a trained retrieval system.
 
 ---
 
@@ -165,6 +179,6 @@ See `requirements.txt`. Key dependencies:
 | `torch` / `torchvision` | Deep learning framework |
 | `open-clip-torch` | CLIP ViT-L/14 for naming |
 | `transformers` | DINOv2 utilities |
-| `faiss-cpu` | Approximate nearest-neighbour search |
+| `faiss-cpu` | Nearest-neighbour search |
 | `gradio` | Interactive web UI |
 | `openai` | LLM-based feature naming (GPT-4o) |

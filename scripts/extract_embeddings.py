@@ -53,6 +53,11 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    if not torch.cuda.is_available():
+        if args.batch_size == 64:  # only override if still at default
+            args.batch_size = 32
+            print("Non-CUDA device detected — batch size reduced to 32")
+
     input_dir = args.input or Path("data/raw") / args.dataset
     output_dir = args.output
     output_dir.mkdir(parents=True, exist_ok=True)

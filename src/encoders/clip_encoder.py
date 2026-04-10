@@ -8,6 +8,14 @@ import torch
 import torch.nn.functional as F
 
 
+def _get_device() -> torch.device:
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if torch.backends.mps.is_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
 class CLIPEncoder:
     """Wraps open-clip CLIP ViT-L/14 for image and text encoding.
 
@@ -22,7 +30,7 @@ class CLIPEncoder:
             model_name: open-clip model identifier.
             pretrained: Pretrained weights tag recognised by open-clip.
         """
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = _get_device()
 
         self.model, _, self.preprocess = open_clip.create_model_and_transforms(
             model_name, pretrained=pretrained
