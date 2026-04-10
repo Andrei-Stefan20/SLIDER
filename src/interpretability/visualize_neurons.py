@@ -1,7 +1,6 @@
 """Matplotlib visualisations for SAE feature analysis."""
 
 from pathlib import Path
-from typing import Optional
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -12,21 +11,9 @@ from src.naming.feature_namer import FeatureImages
 
 def plot_feature_gallery(
     feature_images: FeatureImages,
-    save_path: Optional[Path | str] = None,
+    save_path: Path | str | None = None,
 ) -> None:
-    """Display a gallery of the top-K and bottom-K images for a feature.
-
-    The top row shows images with the *highest* activation; the bottom row
-    shows images with the *lowest* activation.  Each image is labelled with
-    its activation value.
-
-    Args:
-        feature_images: :class:`~src.naming.feature_namer.FeatureImages`
-            named tuple returned by
-            :func:`~src.naming.feature_namer.get_top_images`.
-        save_path: If provided, save the figure to this path instead of
-            displaying it.
-    """
+    """Show top-K (HIGH) and bottom-K (LOW) activating images side by side."""
     k = max(len(feature_images.top_paths), len(feature_images.bottom_paths))
     if k == 0:
         return
@@ -52,7 +39,6 @@ def plot_feature_gallery(
         axes[1, col].set_title(f"{val:.3f}", fontsize=8)
         axes[1, col].axis("off")
 
-    # Hide unused axes if top/bottom lists differ in length
     for col in range(len(feature_images.top_paths), k):
         axes[0, col].axis("off")
     for col in range(len(feature_images.bottom_paths), k):
@@ -74,15 +60,9 @@ def plot_feature_gallery(
 def plot_activation_histogram(
     activations: np.ndarray,
     feature_id: int,
-    save_path: Optional[Path | str] = None,
+    save_path: Path | str | None = None,
 ) -> None:
-    """Plot the activation value distribution for a single feature.
-
-    Args:
-        activations: Float32 array of shape ``(N, hidden_dim)``.
-        feature_id: Column index of the feature to analyse.
-        save_path: If provided, save the figure to this path.
-    """
+    """Distribution of non-zero activations for a single feature."""
     values = activations[:, feature_id]
     nonzero = values[values > 0]
     zero_frac = (values == 0).mean()
@@ -108,17 +88,9 @@ def plot_activation_histogram(
 
 def plot_feature_variance_distribution(
     activations: np.ndarray,
-    save_path: Optional[Path | str] = None,
+    save_path: Path | str | None = None,
 ) -> None:
-    """Plot the distribution of per-feature activation variance.
-
-    Useful for identifying how many features capture meaningful variation
-    versus those that are nearly always zero.
-
-    Args:
-        activations: Float32 array of shape ``(N, hidden_dim)``.
-        save_path: If provided, save the figure to this path.
-    """
+    """Histogram and sorted curve of per-feature activation variance."""
     variances = activations.var(axis=0)
     sorted_vars = np.sort(variances)[::-1]
 
@@ -147,24 +119,18 @@ def plot_feature_variance_distribution(
 
 def plot_dead_features(
     activations: np.ndarray,
-    save_path: Optional[Path | str] = None,
+    save_path: Path | str | None = None,
 ) -> None:
-    """Visualise dead vs alive features and per-sample sparsity.
-
-    Args:
-        activations: Float32 array of shape ``(N, hidden_dim)``.
-        save_path: If provided, save the figure to this path.
-    """
-    ever_active = (activations > 0).any(axis=0)
-    dead_count = int((~ever_active).sum())
-    alive_count = int(ever_active.sum())
+    """Dead vs alive feature pie chart and per-sample sparsity histogram."""
+    active = (activations > 0).any(axis=0)
+    dead_count = int((~active).sum())
+    alive_count = int(active.sum())
     hidden_dim = activations.shape[1]
 
     sample_sparsity = (activations == 0).mean(axis=1)
 
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
 
-    # Pie chart: dead vs alive
     axes[0].pie(
         [dead_count, alive_count],
         labels=[f"Dead ({dead_count})", f"Alive ({alive_count})"],
@@ -174,7 +140,6 @@ def plot_dead_features(
     )
     axes[0].set_title(f"Dead features out of {hidden_dim}")
 
-    # Histogram: per-sample sparsity
     axes[1].hist(
         sample_sparsity, bins=50, color="#2a6ebb", edgecolor="white", linewidth=0.4
     )

@@ -1,30 +1,36 @@
 """Gradio-based interactive retrieval UI for SLIDERS."""
 
 from pathlib import Path
-from typing import Optional
 
 import gradio as gr
 import json
 import numpy as np
 import torch
+import torchvision.transforms as T
 from PIL import Image
 
 from src.encoders.dino_encoder import DINOEncoder
 from src.models.sae import SparseAutoencoder
-from src.naming.feature_namer import get_top_images, rank_features_by_variance
+from src.naming.feature_namer import rank_features_by_variance
 from src.retrieval.index import load_index
 from src.retrieval.query import search_with_sliders
+from src.utils.logging import get_logger
 
-# ---------------------------------------------------------------------------
-# Configuration — adjust these paths before launching
-# ---------------------------------------------------------------------------
+logger = get_logger(__name__)
+
 DEFAULT_INDEX_PATH = Path("data/processed/index.faiss")
 DEFAULT_SAE_PATH = Path("models/sae_best.pt")
 DEFAULT_EMBEDDINGS_PATH = Path("data/processed/embeddings.npy")
 DEFAULT_IMAGE_PATHS_JSON = Path("data/processed/image_paths.json")
-N_SLIDERS = 10          # How many sliders to expose
-SLIDER_K_IMAGES = 10    # Top-K images used to name each slider
-RETRIEVAL_K = 20        # Number of retrieved images to display
+N_SLIDERS = 10
+RETRIEVAL_K = 20
+
+_DINO_TRANSFORM = T.Compose([
+    T.Resize(224),
+    T.CenterCrop(224),
+    T.ToTensor(),
+    T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
 
 
 def load_resources(
@@ -33,15 +39,10 @@ def load_resources(
     embeddings_path: Path = DEFAULT_EMBEDDINGS_PATH,
     image_paths_json: Path = DEFAULT_IMAGE_PATHS_JSON,
 ) -> tuple:
-    """Load all pre-built artefacts needed for interactive retrieval.
-
-    Returns:
-        Tuple ``(dino_encoder, sae, index, embeddings, image_paths, feature_ids, feature_names)``.
-    """
+    """Load all pre-built artefacts needed for interactive retrieval."""
     dino = DINOEncoder(use_patches=False)
 
     sae_state = torch.load(sae_path, map_location="cpu")
-    # Infer dims from state dict
     input_dim = sae_state["encoder.weight"].shape[1]
     hidden_dim = sae_state["encoder.weight"].shape[0]
     sae = SparseAutoencoder(input_dim=input_dim, hidden_dim=hidden_dim)
@@ -76,35 +77,17 @@ def build_app(
     embeddings_path: Path = DEFAULT_EMBEDDINGS_PATH,
     image_paths_json: Path = DEFAULT_IMAGE_PATHS_JSON,
 ) -> gr.Blocks:
-    """Construct and return the Gradio Blocks app.
-
-    Args:
-        index_path: Path to the saved FAISS index.
-        sae_path: Path to the saved SAE checkpoint.
-        embeddings_path: Path to the pre-extracted embeddings ``.npy``.
-        image_paths_json: Path to the JSON list of image paths.
-
-    Returns:
-        A :class:`gradio.Blocks` instance.  Call ``.launch()`` to run it.
-    """
+    """Construct and return the Gradio Blocks app."""
     dino, sae, index, embeddings, image_paths, feature_ids, feature_names = (
         load_resources(index_path, sae_path, embeddings_path, image_paths_json)
     )
 
-    def retrieve(query_image: Optional[np.ndarray], *slider_values: float):
+    def retrieve(query_image: np.ndarray | None, *slider_values: float):
         if query_image is None:
             return []
 
         pil_img = Image.fromarray(query_image).convert("RGB")
-        # Preprocess with DINOv2's standard ImageNet normalisation
-        import torchvision.transforms as T
-        transform = T.Compose([
-            T.Resize(224),
-            T.CenterCrop(224),
-            T.ToTensor(),
-            T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-        ])
-        img_tensor = transform(pil_img).unsqueeze(0)
+        img_tensor = _DINO_TRANSFORM(pil_img).unsqueeze(0)
         query_emb = dino.encode(img_tensor).squeeze(0).numpy()
         query_emb = query_emb / (np.linalg.norm(query_emb) + 1e-8)
 
@@ -124,8 +107,8 @@ def build_app(
                 try:
                     img = Image.open(image_paths[idx]).convert("RGB")
                     result_images.append(img)
-                except Exception:
-                    pass
+                except Exception as e:
+                    logger.warning(f"Could not load image {image_paths[idx]}: {e}")
         return result_images
 
     with gr.Blocks(title="SLIDERS — Interactive Image Retrieval") as demo:

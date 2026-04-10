@@ -11,11 +11,10 @@ Usage:
 
 import argparse
 import json
-from pathlib import Path
+from pathlib import Path, PurePath
 
 import numpy as np
 import torch
-from sklearn.preprocessing import normalize
 
 from src.encoders.clip_encoder import CLIPEncoder
 from src.evaluation.clip_alignment import batch_clip_alignment
@@ -27,12 +26,7 @@ from src.retrieval.query import search
 
 
 def build_same_class_ground_truth(image_paths: list[str]) -> list[list[int]]:
-    """Build ground-truth relevant sets based on parent directory (class label).
-
-    For each image, the relevant set is all other images in the same
-    sub-directory.
-    """
-    from pathlib import PurePath
+    """For each image, return the indices of all other images in the same class directory."""
     labels = [PurePath(p).parent.name for p in image_paths]
     label_to_indices: dict[str, list[int]] = {}
     for i, label in enumerate(labels):
@@ -69,7 +63,8 @@ def main() -> None:
 
     # ---------- Recall@K ----------
     print("Computing Recall@K (same-class ground truth)...")
-    norm_embs = normalize(embeddings, norm="l2")
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    norm_embs = embeddings / np.where(norms > 0, norms, 1.0)
     ground_truth = build_same_class_ground_truth(image_paths)
 
     results = []

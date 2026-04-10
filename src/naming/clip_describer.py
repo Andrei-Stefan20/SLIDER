@@ -1,7 +1,6 @@
 """Visual description of images using CLIP zero-shot classification."""
 
 from pathlib import Path
-from typing import List, Optional
 
 import torch
 from PIL import Image
@@ -35,8 +34,8 @@ class CLIPDescriber:
 
     def __init__(
         self,
-        clip_encoder: Optional[CLIPEncoder] = None,
-        vocab: Optional[list[str]] = None,
+        clip_encoder: CLIPEncoder | None = None,
+        vocab: list[str] | None = None,
         top_n_words: int = 5,
     ) -> None:
         """Initialise the describer.
@@ -52,12 +51,11 @@ class CLIPDescriber:
         self.vocab = vocab if vocab is not None else DEFAULT_VOCAB
         self.top_n_words = top_n_words
 
-        # Pre-encode the vocabulary (cached)
         self._text_embs: torch.Tensor = self.encoder.encode_text(
             [f"a {w} image" for w in self.vocab]
         )
 
-    def describe_images(self, image_paths: list[Path | str]) -> List[str]:
+    def describe_images(self, image_paths: list[Path | str]) -> list[str]:
         """Generate a short description for each image.
 
         Args:
@@ -74,7 +72,6 @@ class CLIPDescriber:
             img_tensor = self.encoder.preprocess(img).unsqueeze(0)
             img_emb = self.encoder.encode_images(img_tensor).squeeze(0)
 
-            # Cosine similarities against vocabulary embeddings
             sims = (self._text_embs @ img_emb).tolist()
             top_idx = sorted(range(len(sims)), key=lambda i: sims[i], reverse=True)
             top_words = [self.vocab[i] for i in top_idx[: self.top_n_words]]

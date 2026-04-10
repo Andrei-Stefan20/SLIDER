@@ -1,7 +1,6 @@
 """Measures how well a generated feature name aligns with its top images."""
 
 from pathlib import Path
-from typing import List
 
 import torch
 from PIL import Image
@@ -11,7 +10,7 @@ from src.encoders.clip_encoder import CLIPEncoder
 
 def clip_alignment_score(
     feature_name: str,
-    top_image_paths: List[Path | str],
+    top_image_paths: list[Path | str],
     clip_encoder: CLIPEncoder,
 ) -> float:
     """Compute the average CLIP cosine similarity between a feature name and

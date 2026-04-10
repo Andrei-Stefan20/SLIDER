@@ -1,62 +1,44 @@
 # SLIDERS
 
-## What is this?
+Interactive image retrieval steered by interpretable visual features.
 
-You upload an image. The system finds visually similar images in a dataset — but unlike standard retrieval, it also shows you a set of sliders, each labelled with a visual concept like "leaf margin complexity" or "surface texture uniformity". These concepts are discovered automatically: a Sparse Autoencoder (SAE) is trained on DINOv2 embeddings of the dataset, and its learned features are named by showing top/bottom activating images to CLIP and GPT-4o. When you move a slider, the query embedding is shifted along the corresponding SAE feature direction, steering retrieval toward images that have more or less of that property. No text input is required at any point — the sliders are the interface.
+Upload a query image and adjust named sliders — e.g. *leaf margin complexity* or *surface texture uniformity* — to pull results toward images that have more or less of each property. No text input required at any point.
+
+The sliders correspond to directions in DINOv2 embedding space discovered by a Sparse Autoencoder (SAE). Each direction is automatically named by showing its most- and least-activating images to CLIP and GPT-4o.
 
 ---
 
-## Architecture
+## How it works
 
 ```
 Raw Images
     │
     ▼
-┌─────────────────┐
-│  DINOv2 ViT-L/14│  ← CLS token (1024-dim)
-└────────┬────────┘
-         │ embeddings.npy
-         ▼
-┌─────────────────────────────────┐
-│  Sparse Autoencoder (SAE)       │
-│  Linear → ReLU → Linear        │
-│  1024 → 8192 → 1024            │
-└────────┬──────────────┬─────────┘
-         │ h (sparse)   │ x_hat
-         │              │
-         ▼              ▼ (reconstruction loss + L1)
-  Feature directions   Training
-  (decoder columns)
-         │
-         ▼
-┌──────────────────────────────────┐
-│  CLIP ViT-L/14                   │
-│  + LLM (GPT-4o)                  │
-│  → Named sliders                 │
-│  e.g. "leaf margin complexity"   │
-└─────────────┬────────────────────┘
-              │
-              ▼
-┌─────────────────────────────────────────────────┐
-│  Gradio UI                                      │
-│  ┌──────────┐  ┌──────────────────────────────┐ │
-│  │  Query   │  │  Sliders (named SAE features) │ │
-│  │  Image   │  │  ○────────────●──────────○   │ │
-│  └────┬─────┘  └──────────────┬───────────────┘ │
-│       │    Steered query emb  │                  │
-│       └──────────┬────────────┘                  │
-│                  ▼                               │
-│          FAISS IndexFlatIP                       │
-│          (cosine similarity)                     │
-│                  │                               │
-│                  ▼                               │
-│          Retrieved Gallery                       │
-└─────────────────────────────────────────────────┘
+DINOv2 ViT-L/14  →  embeddings.npy  (1024-dim CLS token per image)
+    │
+    ▼
+Sparse Autoencoder  →  sae_best.pt  (1024 → 8192 → 1024)
+    │
+    ├── decoder columns  →  feature directions in embedding space
+    │
+    └── CLIP + GPT-4o  →  feature_names.json  (e.g. "leaf margin complexity")
+    │
+    ▼
+FAISS IndexFlatIP  →  index.faiss  (cosine similarity search)
+    │
+    ▼
+Gradio UI  —  upload image, adjust sliders, browse steered results
 ```
 
-## How it works
+At query time: `q' = q + Σ(alpha_i · direction_i)`, then L2-normalise and search.
 
-DINOv2 embeddings are extracted once and stored on disk. The SAE is trained on these embeddings to decompose them into sparse, roughly monosemantic features — each decoder column becomes a direction in embedding space that corresponds to some visual property. To name these directions, we find the images that activate each feature most and least, describe them with CLIP against a vocabulary of visual adjectives, and pass those descriptions to GPT-4o to generate a short label. At retrieval time, the query embedding is shifted by a weighted sum of selected feature directions before the FAISS search, producing results that reflect the slider adjustments.
+---
+
+## Requirements
+
+- Python 3.10+
+- ~4 GB disk space for model weights (DINOv2 + CLIP download on first run)
+- OpenAI API key — **only for Step 3** (feature naming); the rest runs offline
 
 ---
 
@@ -65,19 +47,33 @@ DINOv2 embeddings are extracted once and stored on disk. The SAE is trained on t
 ```bash
 git clone <repo-url>
 cd SLIDER
-python -m venv .venv && source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-Set your OpenAI API key (required for the naming step only):
+Set your OpenAI key if you plan to run Step 3:
 
 ```bash
-export OPENAI_API_KEY=sk-...
+cp .env.example .env
+# edit .env and fill in OPENAI_API_KEY
+export $(cat .env | xargs)   # or set the variable however you prefer
 ```
 
 ---
 
-## Usage — 5-step pipeline
+## Usage
+
+Place raw images under `data/raw/<dataset>/` in standard ImageFolder layout:
+
+```
+data/raw/plantvillage/
+    Apple___Black_rot/
+        img001.jpg
+        img002.jpg
+    Apple___healthy/
+        img003.jpg
+    ...
+```
 
 ### Step 1 — Extract DINOv2 embeddings
 
@@ -85,8 +81,7 @@ export OPENAI_API_KEY=sk-...
 python scripts/extract_embeddings.py \
     --dataset plantvillage \
     --input data/raw/plantvillage \
-    --output data/processed/ \
-    --batch-size 64
+    --output data/processed/
 ```
 
 Outputs: `data/processed/plantvillage_embeddings.npy`, `plantvillage_image_paths.json`
@@ -102,7 +97,7 @@ python scripts/train_sae.py \
 
 Outputs: `models/sae_best.pt`
 
-### Step 3 — Name SAE features
+### Step 3 — Name SAE features  *(requires OpenAI API key)*
 
 ```bash
 python scripts/name_features.py \
@@ -125,13 +120,14 @@ python scripts/build_index.py \
 
 Outputs: `data/processed/index.faiss`
 
-### Step 5 — Launch the interactive UI
+### Step 5 — Launch the UI
 
 ```bash
 python src/ui/app.py
 ```
 
-Open `http://127.0.0.1:7860` in your browser.
+Open `http://127.0.0.1:7860`.  
+The UI reads from the default paths in Step 1–4. If `feature_names.json` is missing, sliders fall back to the top-N features by activation variance.
 
 ---
 
@@ -146,39 +142,60 @@ python scripts/evaluate.py \
     --feature-names models/feature_names.json
 ```
 
-Reports **Recall@1/5/10** (same-class ground truth) and **CLIP alignment** for each named slider.
+Reports **Recall@1/5/10** (same-class ground truth) and **CLIP alignment** per named slider.
 
 ---
 
 ## Datasets
 
-| Dataset | Description | Classes | Notes |
-|---------|-------------|---------|-------|
-| **PlantVillage** | Plant leaf disease images | 38 disease/healthy classes | Main benchmark — disease features are visually continuous, ideal for slider discovery |
-| **Ceramics** | Archaeological ceramic shards | Typology-based categories | Stress test — iconographic features push the limits of the backbone |
+| Dataset | Description | Classes |
+|---------|-------------|---------|
+| **PlantVillage** | Plant leaf disease images | 38 |
+| **Ceramics** | Archaeological ceramic shards | typology-based |
 
-Place raw images under `data/raw/<dataset>/` following the standard ImageFolder layout
-(`data/raw/plantvillage/<class_name>/<image>.jpg`).
+Config files for both are in `configs/`. Key SAE hyperparameters differ between datasets (see the YAML files).
+
+---
+
+## Project structure
+
+```
+configs/          YAML configs for each dataset
+scripts/          CLI entry points (run in order: extract → train → name → index)
+src/
+  data/           Image and embedding dataset classes
+  encoders/       DINOv2 and CLIP wrappers
+  models/         SAE architecture and training loop
+  retrieval/      FAISS index, query, and steering logic
+  naming/         CLIP describer + LLM feature namer
+  evaluation/     Recall@K and CLIP alignment metrics
+  interpretability/ Activation analysis and Matplotlib visualisations
+  ui/             Gradio app
+  utils/          Logging, serialisation, device detection
+notebooks/        Exploratory analysis (dataset structure, SAE features)
+```
+
+---
+
+## Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `torch` / `torchvision` | Deep learning |
+| `open-clip-torch` | CLIP ViT-L/14 for feature naming and evaluation |
+| `faiss-cpu` | Nearest-neighbour search |
+| `gradio` | Interactive web UI |
+| `openai` | GPT-4o for feature naming (Step 3 only) |
+| `matplotlib` | Visualisation notebooks and interpretability plots |
+| `tqdm` | Progress bars |
+| `pyyaml` | Config parsing |
+| `pillow` | Image loading |
 
 ---
 
 ## Known limitations
 
-- SAE features may not be interpretable on all datasets. Sparsity and hidden dimension interact with the visual diversity of the corpus; expect dead or uninterpretable features, especially on small or iconographically constrained collections.
-- Naming quality depends on CLIP vocabulary coverage and the LLM prompt. The pipeline can produce plausible-sounding but inaccurate names when the true feature captures something outside the default adjective vocabulary.
-- Retrieval is zero-shot; no supervised fine-tuning is performed. Recall numbers should be read as a measure of the backbone's representational quality for a given dataset, not as a trained retrieval system.
-
----
-
-## Requirements
-
-See `requirements.txt`. Key dependencies:
-
-| Package | Purpose |
-|---------|---------|
-| `torch` / `torchvision` | Deep learning framework |
-| `open-clip-torch` | CLIP ViT-L/14 for naming |
-| `transformers` | DINOv2 utilities |
-| `faiss-cpu` | Nearest-neighbour search |
-| `gradio` | Interactive web UI |
-| `openai` | LLM-based feature naming (GPT-4o) |
+- SAE features may not be interpretable on all datasets. Dead or uninterpretable features are common on small or iconographically constrained collections.
+- Naming quality depends on CLIP vocabulary coverage and the LLM prompt. Names can be plausible-sounding but inaccurate when the feature captures something outside the default adjective vocabulary.
+- Retrieval is zero-shot; no supervised fine-tuning is performed. Recall numbers measure backbone quality for a given dataset, not a trained retrieval system.
+- DINOv2 inference falls back to CPU on Apple Silicon (MPS) due to known compatibility issues; this makes embedding extraction slow on Mac.

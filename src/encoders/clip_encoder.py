@@ -1,19 +1,10 @@
 """CLIP ViT-L/14 encoder for image and text feature extraction."""
 
-from typing import List
-
-import numpy as np
 import open_clip
 import torch
 import torch.nn.functional as F
 
-
-def _get_device() -> torch.device:
-    if torch.cuda.is_available():
-        return torch.device("cuda")
-    if torch.backends.mps.is_available():
-        return torch.device("mps")
-    return torch.device("cpu")
+from src.utils.device import get_device
 
 
 class CLIPEncoder:
@@ -30,7 +21,7 @@ class CLIPEncoder:
             model_name: open-clip model identifier.
             pretrained: Pretrained weights tag recognised by open-clip.
         """
-        self.device = _get_device()
+        self.device = get_device()
 
         self.model, _, self.preprocess = open_clip.create_model_and_transforms(
             model_name, pretrained=pretrained
@@ -53,11 +44,11 @@ class CLIPEncoder:
         return F.normalize(features, dim=-1).cpu()
 
     @torch.no_grad()
-    def encode_text(self, texts: List[str]) -> torch.Tensor:
+    def encode_text(self, texts: list[str]) -> torch.Tensor:
         """Encode a list of text strings into L2-normalised feature vectors.
 
         Args:
-            texts: List of strings to encode.
+            texts: Strings to encode.
 
         Returns:
             L2-normalised float32 tensor of shape ``(N, 768)``.

@@ -1,11 +1,9 @@
 """Recall@K evaluation metrics for image retrieval."""
 
-from typing import Sequence
-
 
 def recall_at_k(
-    retrieved_indices: Sequence[int],
-    relevant_indices: Sequence[int],
+    retrieved_indices: list[int],
+    relevant_indices: list[int],
     k: int,
 ) -> float:
     """Compute Recall@K for a single query.

@@ -11,9 +11,10 @@ models/
 *.pt
 *.pth
 
-# Numpy
+# Embeddings and index
 *.npy
 *.npz
+*.faiss
 
 # Logs
 *.log
@@ -21,10 +22,17 @@ models/
 # Python
 __pycache__/
 *.pyc
+*.egg-info/
+dist/
+build/
 
 # Virtual env
 venv/
+.venv/
 .env/
+
+# Environment variables
+.env
 
 # MacOS
 .DS_Store

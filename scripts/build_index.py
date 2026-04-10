@@ -10,7 +10,6 @@ import argparse
 from pathlib import Path
 
 import numpy as np
-from sklearn.preprocessing import normalize
 
 from src.retrieval.index import build_index, save_index
 
@@ -35,15 +34,13 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    print(f"Loading embeddings from: {args.embeddings}")
     embeddings = np.load(args.embeddings).astype(np.float32)
-    print(f"  Shape: {embeddings.shape}")
+    print(f"Loaded {embeddings.shape} from {args.embeddings}")
 
     if not args.no_normalize:
-        print("L2-normalising embeddings...")
-        embeddings = normalize(embeddings, norm="l2")
+        norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+        embeddings = embeddings / np.where(norms > 0, norms, 1.0)
 
-    print("Building FAISS IndexFlatIP...")
     index = build_index(embeddings)
     save_index(index, args.output)
     print(f"Index saved -> {args.output}  ({index.ntotal} vectors, dim={index.d})")

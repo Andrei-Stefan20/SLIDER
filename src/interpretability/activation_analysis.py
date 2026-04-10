@@ -14,12 +14,12 @@ def compute_activations(
     """Run the SAE encoder over all embeddings and return the activation matrix.
 
     Args:
-        sae: Trained :class:`~src.models.sae.SparseAutoencoder` (eval mode).
+        sae: Trained SAE in eval mode.
         embeddings: Float32 array of shape ``(N, input_dim)``.
-        batch_size: Number of samples processed per forward pass.
+        batch_size: Samples per forward pass.
 
     Returns:
-        Float32 array of shape ``(N, hidden_dim)`` containing ReLU activations.
+        Float32 array of shape ``(N, hidden_dim)``.
     """
     sae.eval()
     results: list[np.ndarray] = []
@@ -35,42 +35,18 @@ def compute_activations(
 
 
 def dead_feature_ratio(activations: np.ndarray) -> float:
-    """Fraction of SAE features that never activate across the dataset.
-
-    A feature is considered dead if its activation is zero for every sample.
-
-    Args:
-        activations: Float32 array of shape ``(N, hidden_dim)``.
-
-    Returns:
-        Scalar in ``[0, 1]``.  0 means all features are alive.
-    """
-    ever_active = (activations > 0).any(axis=0)
-    return float((~ever_active).mean())
+    """Fraction of features that never activate across the dataset."""
+    active = (activations > 0).any(axis=0)
+    return float((~active).mean())
 
 
 def mean_activations_per_feature(activations: np.ndarray) -> np.ndarray:
-    """Compute the mean activation value for each feature across the dataset.
-
-    Args:
-        activations: Float32 array of shape ``(N, hidden_dim)``.
-
-    Returns:
-        Float32 array of shape ``(hidden_dim,)``.
-    """
+    """Mean activation per feature across all samples. Shape: ``(hidden_dim,)``."""
     return activations.mean(axis=0)
 
 
 def sparsity_per_sample(activations: np.ndarray) -> np.ndarray:
-    """Compute the fraction of zero activations for each sample.
-
-    Args:
-        activations: Float32 array of shape ``(N, hidden_dim)``.
-
-    Returns:
-        Float32 array of shape ``(N,)`` where each value is the proportion
-        of features that are inactive for that sample.
-    """
+    """Fraction of zero activations per sample. Shape: ``(N,)``."""
     return (activations == 0).mean(axis=1).astype(np.float32)
 
 
@@ -79,20 +55,12 @@ def top_activating_features(
     image_idx: int,
     top_n: int = 10,
 ) -> list[int]:
-    """Return the indices of the most activated features for a single image.
+    """Feature indices with the highest activations for a single image.
 
-    Args:
-        activations: Float32 array of shape ``(N, hidden_dim)``.
-        image_idx: Row index of the query image.
-        top_n: Number of top features to return.
-
-    Returns:
-        List of ``top_n`` feature indices sorted by descending activation,
-        including only features with non-zero activation.
+    Only non-zero activations are returned.
     """
     row = activations[image_idx]
-    active_mask = row > 0
-    if not active_mask.any():
+    if not (row > 0).any():
         return []
     ranked = np.argsort(row)[::-1]
     return [int(i) for i in ranked[:top_n] if row[i] > 0]

@@ -1,7 +1,5 @@
 """Names SAE features by querying an LLM with visual descriptions."""
 
-from typing import List, Optional
-
 from openai import OpenAI
 
 
@@ -23,7 +21,7 @@ class LLMFeatureNamer:
     def __init__(
         self,
         model: str = "gpt-4o",
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
     ) -> None:
         """Initialise the LLM namer.
 
@@ -37,8 +35,8 @@ class LLMFeatureNamer:
 
     def name_feature(
         self,
-        top_descriptions: List[str],
-        bottom_descriptions: List[str],
+        top_descriptions: list[str],
+        bottom_descriptions: list[str],
     ) -> str:
         """Produce a concise name for the visual property of an SAE feature.
 

@@ -2,7 +2,6 @@
 
 import faiss
 import numpy as np
-import torch
 
 from src.models.sae import SparseAutoencoder
 from src.retrieval.steering import steer_query
